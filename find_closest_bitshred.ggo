@@ -1,0 +1,15 @@
+package "find closes bitshred"
+version "???"
+purpose "Find the closes bitshred match in the SID database"
+option "dbname"	d "name of database to connect" string optional
+option "dbhost" H "database host" string optional
+option "dbpass" p "database password" string optional
+option "dbuser" u "database user" string optional
+option "ngram"  n "n in n-grams to use for shredding" int required
+option "size"   m "bitshred size (aka m)" int required
+option "hash"   h "Hash to use (jenkins, djb2, djb2xor)" string required
+option "query"  q "query song database" flag off
+option "verbose" - "additional verbose output" flag off
+option "closer" - "find all SIDs closer than delta" double optional
+#option "sid"    s "SID to look for" int required
+#option "debug"  - "activate debugging output" flag off

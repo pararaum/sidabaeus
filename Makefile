@@ -3,7 +3,7 @@
 CXXFLAGS = -O2 -Wall -Wextra -std=c++11 -DNDEBUG
 LIBS = -lpqxx
 
-EXES = calc_bigram_distances test_data_types calculate_bitshred find_closest_bitshred
+EXES = calc_bigram_distances test_data_types calculate_bitshred find_closest_bitshred calculate_fuzzy_hash
 
 all:	$(EXES)
 
@@ -20,6 +20,12 @@ calculate_bitshred.cmdline.o: calculate_bitshred.cmdline.c calculate_bitshred.gg
 
 calculate_bitshred: calculate_bitshred.cmdline.h calculate_bitshred.cmdline.o calculate_bitshred.o
 	$(CXX) -g -o $@ $+ $(LIBS)
+
+calculate_fuzzy_hash.cmdline.h: calculate_fuzzy_hash.ggo
+	gengetopt --unamed-opts --conf-parser -F calculate_fuzzy_hash.cmdline < $<
+
+calculate_fuzzy_hash: calculate_fuzzy_hash.cmdline.h calculate_fuzzy_hash.cmdline.o calculate_fuzzy_hash.o
+	$(CXX) -g -o $@ $+ -ltlsh $(LIBS)
 
 #find_closest_bitshred8192: find_closest_bitshred8192.o
 #	$(CXX) -g -o $@ $+ $(LIBS)
@@ -40,3 +46,4 @@ clean:
 .PHONY: distclean
 distclean: clean
 	rm *.cmdline.c *.cmdline.h
+

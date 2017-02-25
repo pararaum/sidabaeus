@@ -20,6 +20,7 @@ CREATE EXTENSION pg_trgm;
 -- This is the files tables. It contains the sid (storage id) and the
 -- file name.
 CREATE TABLE IF NOT EXISTS files (sid SERIAL PRIMARY KEY, filename TEXT NOT NULL UNIQUE, data bytea);
+CREATE INDEX files_length_data ON files (length(data));
 
 -- This table contains the counts for all bigrams found in the
 -- file. Only a single unique tuple of the storage id, first byte,
@@ -52,6 +53,11 @@ CREATE TABLE IF NOT EXISTS bitshred8192 (sid INTEGER NOT NULL REFERENCES files O
 
 -- The size of the bitshred can also be varied, therefore we use BIT VARYING to store m bits.
 CREATE TABLE IF NOT EXISTS bitshred (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, m integer NOT NULL, n INTEGER NOT NULL, hash TEXT NOT NULL, bitshred BIT VARYING NOT NULL, PRIMARY KEY (sid,m,n,hash), CHECK (n > 0 AND length(bitshred) = m));
+
+
+-- Table for the TLSH fuzzy-hash
+CREATE TABLE IF NOT EXISTS fuzzy_tlsh (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, hash bytea NOT NULL, PRIMARY KEY (sid));
+
 
 -- Very slow?
 CREATE OR REPLACE FUNCTION calc_2d_histogram(asid integer) returns float array as $$

@@ -2,3 +2,4 @@ package "calculate fuzzy hash"
 version "???"
 purpose "Calculate the fuzzy hashes for the SID database"
 option "hash"   h "Hash to use (tlsh)" string required
+option "maximum-dist" M "Maximum number of distances" int default="15" optional

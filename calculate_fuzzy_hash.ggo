@@ -1,0 +1,4 @@
+package "calculate fuzzy hash"
+version "???"
+purpose "Calculate the fuzzy hashes for the SID database"
+option "hash"   h "Hash to use (tlsh)" string required

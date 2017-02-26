@@ -59,6 +59,12 @@ CREATE TABLE IF NOT EXISTS bitshred (sid INTEGER NOT NULL REFERENCES files ON DE
 CREATE TABLE IF NOT EXISTS fuzzy_tlsh (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, hash bytea NOT NULL, PRIMARY KEY (sid));
 
 
+-- Table for ssdeep fuzzy-hash
+CREATE TABLE IF NOT EXISTS fuzzy_ssdeep (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, blocksize INTEGER NOT NULL, hash TEXT NOT NULL, CHECK(blocksize > 0), PRIMARY KEY (sid));
+CREATE index fuzzy_ssdeep_blocksize ON fuzzy_ssdeep (blocksize);
+CREATE index fuzzy_ssdeep_hash ON fuzzy_ssdeep (hash);
+
+
 -- Very slow?
 CREATE OR REPLACE FUNCTION calc_2d_histogram(asid integer) returns float array as $$
 DECLARE

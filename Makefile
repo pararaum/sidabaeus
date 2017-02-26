@@ -25,7 +25,7 @@ calculate_fuzzy_hash.cmdline.h: calculate_fuzzy_hash.ggo
 	gengetopt --unamed-opts --conf-parser -F calculate_fuzzy_hash.cmdline < $<
 
 calculate_fuzzy_hash: calculate_fuzzy_hash.cmdline.h calculate_fuzzy_hash.cmdline.o calculate_fuzzy_hash.o
-	$(CXX) -g -o $@ $+ -ltlsh $(LIBS)
+	$(CXX) -g -o $@ $+ -ltlsh $(LIBS) -lfuzzy
 
 #find_closest_bitshred8192: find_closest_bitshred8192.o
 #	$(CXX) -g -o $@ $+ $(LIBS)

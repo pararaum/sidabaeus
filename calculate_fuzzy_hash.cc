@@ -100,74 +100,30 @@ public:
     return count - 1;
   }
 
-  size_t uiLevenshteinDistance(const std::string &s1, const std::string &s2) {
-    const size_t m(s1.size());
-    const size_t n(s2.size());
-    
-    if( m==0 ) return n;
-    if( n==0 ) return m;
- 
-    size_t *costs = new size_t[n + 1];
- 
-    for( size_t k=0; k<=n; k++ ) costs[k] = k;
- 
-    size_t i = 0;
-    for ( std::string::const_iterator it1 = s1.begin(); it1 != s1.end(); ++it1, ++i )
-      {
-	costs[0] = i+1;
-	size_t corner = i;
- 
-	size_t j = 0;
-	for ( std::string::const_iterator it2 = s2.begin(); it2 != s2.end(); ++it2, ++j )
-	  {
-	    size_t upper = costs[j+1];
-	    if( *it1 == *it2 )
-	      {
-		costs[j+1] = corner;
-	      }
-	    else
-	      {
-		size_t t(upper<corner?upper:corner);
-		costs[j+1] = (costs[j]<t?costs[j]:t)+1;
-	      }
- 
-	    corner = upper;
-	  }
-      }
- 
-    size_t result = costs[n];
-    delete [] costs;
- 
-    return result;
-  }
-  
   void find_similarity(pqxx::work &txn, unsigned int blocksize, const std::string &hash, unsigned int maximum_n) {
     pqxx::result result;
     std::vector<std::pair<unsigned int, int> > distvec;
     std::ostringstream query;
+    std::string left;
     int diff;
 
-    query << "SELECT sid, hash FROM fuzzy_ssdeep WHERE blocksize = " << blocksize << ";";
-    // std::cout << query.str() << std::endl;
-    // std::cout.flush();
+    query << "SELECT sid, blocksize, hash FROM fuzzy_ssdeep;"; // WHERE blocksize = " << blocksize << ";";
+    {
+      std::ostringstream left_stream;
+      left_stream << blocksize << ':' << hash;
+      left = left_stream.str();
+    }
     pqxx::icursorstream cursor(txn, query.str(), "cursor for ssdeep", RESULT_STRIDE);
     while(cursor >> result) {
       for(auto row : result) {
 	unsigned int rsid = row["sid"].as<unsigned int>();
-	//unsigned int blocksize = row["blocksize"].as<unsigned int>();
+	unsigned int rblocksize = row["blocksize"].as<unsigned int>();
 	std::string  rhash(row["hash"].c_str());
-	// {
-	//   std::ostringstream left, right;
-	//   left << blocksize << ':' << hash;
-	//   right << blocksize << ':' << rhash;
-	//   std::cout << left.str() << std::endl;
-	//   std::cout << right.str() << std::endl;
-	//   std::cout.flush();
-	//   //TODO: Why do I get a stack smashing here?
-	//   //diff = edit_distn(left.str().c_str(), left.str().size(), right.str().c_str(), right.str().size());
-	// }
-	diff = uiLevenshteinDistance(hash, rhash);
-	//std::cout << rsid << ' ' << rhash << ' ' << diff <<std::endl;
+	{
+	  std::ostringstream right;
+	  right << rblocksize << ':' << rhash;
+	  diff = 100 - fuzzy_compare(left.c_str(), right.str().c_str());
+	}
 	distvec.push_back(std::make_pair(rsid, diff));
       }
     }

@@ -12,22 +12,57 @@
 #include <stdexcept>
 #include <tlsh.h>
 #include <fuzzy.h>
-//#include <edit_dist.h>
-extern "C" int edit_distn(const char *s1, size_t s1len, const char *s2, size_t s2len);
 #include <boost/lexical_cast.hpp>
 #include "calculate_fuzzy_hash.cmdline.h"
 
 #define RESULT_STRIDE 23
 
 class Fuzzy_Interface {
-public:
+protected:
   typedef std::vector<unsigned int> SID_List_Type;
+  struct Comp_Res {
+    unsigned int sid;
+    double difference;
+    bool operator<(const Comp_Res &other) const { return difference < other.difference; }
+  };
+  typedef std::vector<Comp_Res> ComRes_List;
+  virtual ComRes_List calc_differences(pqxx::work &txn, unsigned int sid) = 0;
+
+public:
+  /*! \brief All missing hashes are calculated
+   *
+   * This function has to calculate all the missing hashes in the
+   * database. It is always called.
+   *
+   * \param conn database connection object
+   */
   virtual unsigned long calculate_missing_hashes(pqxx::connection &conn) = 0;
-  virtual void find_similarities(pqxx::work &txn, const std::vector<unsigned int> &sids, unsigned int maximum_n) = 0;
-  // virtual void calculate(const uint8_t *buf, unsigned long size) = 0;
-  // virtual void calculate(const pqxx::binarystring &binstr) {
-  //   calculate(binstr.data(), binstr.size());
-  // }
+  virtual void find_similarities(pqxx::work &txn, const std::vector<unsigned int> &sids, const gengetopt_args_info &args) {
+    for(unsigned int sid : sids) {
+      std::cout << "\v\tFinding closest to sid: " << sid << std::endl;
+      ComRes_List differences(calc_differences(txn, sid));
+      std::sort(differences.begin(), differences.end());
+      if(differences.size() > static_cast<unsigned int>(args.maximum_dist_arg)) {
+	differences.resize(args.maximum_dist_arg);
+      }
+      output_differences(txn, differences);
+    }
+  }
+  virtual void output_differences(pqxx::work &txn, const ComRes_List &differences) {
+    pqxx::result result;
+    
+    for(auto i : differences) {
+      result = txn.exec((boost::format("SELECT sid,name,author,released,filename,length(data) FROM songs NATURAL JOIN files WHERE sid = %u") % i.sid).str(), "natural join");
+      std::cout << boost::format("%5u %8.3e %32s %32s %32s %s\n")
+	% i.sid % i.difference
+	% result[0]["name"]
+	% result[0]["author"]
+	% result[0]["released"]
+	% result[0]["filename"]
+	;
+    }
+  }
+  virtual ~Fuzzy_Interface() {}
 };
 
 
@@ -49,16 +84,21 @@ protected:
     if(!(lexical >> blocksize)) throw std::runtime_error("blocksize extraction from ssdeep failed");
     return std::make_pair(blocksize, hash);
   }
-  std::pair<unsigned int, std::string> retrieve_hash(pqxx::work &txn, unsigned int sid) {
-    std::ostringstream query;
+  std::string retrieve_hash(pqxx::work &txn, unsigned int sid) {
+    std::ostringstream query, hs;
+    std::string hash;
+ 
     query << "SELECT blocksize, hash FROM fuzzy_ssdeep WHERE"
 	  << " sid = " << sid
 	  << ";";
     pqxx::result result(txn.exec(query.str()));
     if(result.empty()) throw std::runtime_error("can not retrieve hash");
-    return std::make_pair(result[0]["blocksize"].as<unsigned int>(), result[0]["hash"].as<std::string>());
+    hs << result[0]["blocksize"].as<unsigned int>()
+       << ':'
+       << result[0]["hash"].as<std::string>();
+    hash = hs.str();
+    return hash;
   }
-
 
   void insert(pqxx::work &txn, unsigned int sid, unsigned int blocksize, const std::string &hash) {
     std::ostringstream query;
@@ -100,19 +140,14 @@ public:
     return count - 1;
   }
 
-  void find_similarity(pqxx::work &txn, unsigned int blocksize, const std::string &hash, unsigned int maximum_n) {
+  ComRes_List calc_differences(pqxx::work &txn, unsigned int sid) {
     pqxx::result result;
-    std::vector<std::pair<unsigned int, int> > distvec;
+    ComRes_List distvec;
     std::ostringstream query;
-    std::string left;
-    int diff;
-
-    query << "SELECT sid, blocksize, hash FROM fuzzy_ssdeep;"; // WHERE blocksize = " << blocksize << ";";
-    {
-      std::ostringstream left_stream;
-      left_stream << blocksize << ':' << hash;
-      left = left_stream.str();
-    }
+    double diff;
+ 
+    std::string left(retrieve_hash(txn, sid));
+    query << "SELECT sid, blocksize, hash FROM fuzzy_ssdeep;";
     pqxx::icursorstream cursor(txn, query.str(), "cursor for ssdeep", RESULT_STRIDE);
     while(cursor >> result) {
       for(auto row : result) {
@@ -124,38 +159,10 @@ public:
 	  right << rblocksize << ':' << rhash;
 	  diff = 100 - fuzzy_compare(left.c_str(), right.str().c_str());
 	}
-	distvec.push_back(std::make_pair(rsid, diff));
+	distvec.push_back({rsid, diff});
       }
     }
-    std::sort(distvec.begin(), distvec.end(), [](const std::pair<unsigned int, int> &x, const std::pair<unsigned int, int> &y) { return x.second < y.second; });
-    if(distvec.size() > maximum_n) distvec.resize(maximum_n);
-    for(auto i : distvec) {
-      result = txn.exec((boost::format("SELECT sid,name,author,released,filename,length(data) FROM songs NATURAL JOIN files WHERE sid = %u") % i.first).str(), "natural join");
-      std::cout << boost::format("%5u $%04X %3d %32s %32s %32s %s\n")
-	% i.first % i.first % i.second
-	% result[0]["name"]
-	% result[0]["author"]
-	% result[0]["released"]
-	% result[0]["filename"]
-	;
-    }
-  }
-  virtual void find_similarities(pqxx::work &txn, const std::vector<unsigned int> &sids, unsigned int maximum_n) {
-    if(!sids.empty()) {
-      std::ostringstream search;
-      search << "SELECT sid, blocksize, hash FROM fuzzy_ssdeep WHERE sid in (" << sids[0];
-      std::for_each(++sids.begin(), sids.end(), [&search](unsigned int sid) { search << ',' << sid; });
-      search << ");";
-      std::cout << search.str() << std::endl;
-      pqxx::result searchresult(txn.exec(search.str()));
-      for(auto row : searchresult) {
-	unsigned long sid = row["sid"].as<unsigned long>();
-	unsigned long blocksize = row["blocksize"].as<unsigned long>();
-	std::string hash(row["hash"].c_str());
-	std::cout << boost::format("%6ld '%s'\n") % sid % hash;
-	find_similarity(txn, blocksize, hash, maximum_n);
-      }
-    }
+    return distvec;
   }
 };
 
@@ -180,36 +187,27 @@ protected:
 	  << ");";
     txn.exec(query.str());
   }
-  void find_similar_tlsh(pqxx::work &txn, const std::string &hash, unsigned int maxn) {
+  
+public:
+  ComRes_List calc_differences(pqxx::work &txn, unsigned int sid) {
     pqxx::result result;
     Tlsh left, right;
-    std::vector<std::pair<unsigned int, int> > distvec;
+    ComRes_List distvec;
+
+    result = txn.exec((boost::format("SELECT encode(hash, 'hex') AS h FROM fuzzy_tlsh WHERE sid = %u;") % sid).str());
+    left.fromTlshStr(result[0]["h"].c_str());
     pqxx::icursorstream cursor(txn, "SELECT sid, encode(hash, 'hex') AS h FROM fuzzy_tlsh", "cursor for TLSH", RESULT_STRIDE);
-    
-    left.fromTlshStr(hash.c_str());
     while(cursor >> result) {
       for(auto row : result) {
 	right.fromTlshStr(row["h"].c_str());
-	int diff = left.totalDiff(&right);
+	double diff = left.totalDiff(&right);
 	//std::cout << row["sid"].c_str() << ' ' << row["h"].c_str() << ' ' << diff <<std::endl;
-	distvec.push_back(std::make_pair(row["sid"].as<unsigned int>(), diff));
+	distvec.push_back({row["sid"].as<unsigned int>(), diff});
       }
     }
-    std::sort(distvec.begin(), distvec.end(), [](const std::pair<unsigned int, int> &x, const std::pair<unsigned int, int> &y) { return x.second < y.second; });
-    if(distvec.size() > maxn) distvec.resize(maxn);
-    for(auto i : distvec) {
-      result = txn.exec((boost::format("SELECT sid,name,author,released,filename,length(data) FROM songs NATURAL JOIN files WHERE sid = %u") % i.first).str(), "natural join");
-      std::cout << boost::format("%5u $%04X %3d %32s %32s %32s %s\n")
-	% i.first % i.first % i.second
-	% result[0]["name"]
-	% result[0]["author"]
-	% result[0]["released"]
-	% result[0]["filename"]
-	;
-    }
+    return distvec;
   }
 
-public:
   virtual unsigned long calculate_missing_hashes(pqxx::connection &conn) {
     std::ostringstream query;
     pqxx::result result;
@@ -240,22 +238,6 @@ public:
     } while(!result.empty());
     return count - 1;
   }
-  virtual void find_similarities(pqxx::work &txn, const std::vector<unsigned int> &sids, unsigned int maximum_n) {
-    if(!sids.empty()) {
-      std::ostringstream search;
-      search << "SELECT sid, encode(hash, 'hex') FROM fuzzy_tlsh WHERE sid in (" << sids[0];
-      std::for_each(++sids.begin(), sids.end(), [&search](unsigned int sid) { search << ',' << sid; });
-      search << ");";
-      std::cout << search.str() << std::endl;
-      pqxx::result searchresult(txn.exec(search.str()));
-      for(auto row : searchresult) {
-	unsigned long sid = row["sid"].as<unsigned long>();
-	std::string hash(row[1].c_str());
-	std::cout << boost::format("%6ld '%s'\n") % sid % hash;
-	find_similar_tlsh(txn, hash, maximum_n);
-      }
-    }
-  }
 };
 
 
@@ -277,7 +259,7 @@ int run(pqxx::connection &conn, char **begin, char **end, const gengetopt_args_i
       pqxx::work txn(conn, "query fuzzy hashes");
       std::vector<unsigned int> sids(std::distance(begin, end));
       std::transform(begin, end, sids.begin(), [](const char *arg) { return boost::lexical_cast<unsigned int>(arg); });
-      fuzzy_interface->find_similarities(txn, sids, args.maximum_dist_arg);
+      fuzzy_interface->find_similarities(txn, sids, args);
     }
   }
   catch(const std::exception &excp) {

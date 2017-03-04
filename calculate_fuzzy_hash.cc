@@ -19,7 +19,6 @@
 
 class Fuzzy_Interface {
 protected:
-  typedef std::vector<unsigned int> SID_List_Type;
   struct Comp_Res {
     unsigned int sid;
     double difference;
@@ -29,15 +28,32 @@ protected:
   virtual ComRes_List calc_differences(pqxx::work &txn, unsigned int sid) = 0;
 
 public:
+  /*! \brief List of SID ids
+   *
+   * It is used whenever a list of SID IDs is needed.
+   */
+  typedef std::vector<unsigned int> SID_List_Type;
+
   /*! \brief All missing hashes are calculated
    *
    * This function has to calculate all the missing hashes in the
    * database. It is always called.
    *
    * \param conn database connection object
+   * \return number of actually calculated hashes
    */
   virtual unsigned long calculate_missing_hashes(pqxx::connection &conn) = 0;
-  virtual void find_similarities(pqxx::work &txn, const std::vector<unsigned int> &sids, const gengetopt_args_info &args) {
+
+  /*! \brief Find similar SID files.
+   *
+   * Similar SID are found used the fuzzy hash in this class. The
+   * maximum number is given by args.maximum_dist_arg.
+   *
+   * \param txn transaction object
+   * \param sids list of SIDs to find similar songs to
+   * \param args CLI arguments
+   */
+  virtual void find_similarities(pqxx::work &txn, const SID_List_Type &sids, const gengetopt_args_info &args) {
     for(unsigned int sid : sids) {
       std::cout << "\v\tFinding closest to sid: " << sid << std::endl;
       ComRes_List differences(calc_differences(txn, sid));
@@ -48,6 +64,14 @@ public:
       output_differences(txn, differences);
     }
   }
+
+  /*! \brief Nice output.
+   *
+   * Output the found SIDs with difference measure to stdout.
+   *
+   * \param txn database transaction object
+   * \param differences List of SIDs, type is SID_List_Type
+   */
   virtual void output_differences(pqxx::work &txn, const ComRes_List &differences) {
     pqxx::result result;
     
@@ -62,6 +86,11 @@ public:
 	;
     }
   }
+
+  /*\brief Destructor
+   *
+   * Needed for working virtual functions.
+   */
   virtual ~Fuzzy_Interface() {}
 };
 
@@ -257,7 +286,7 @@ int run(pqxx::connection &conn, char **begin, char **end, const gengetopt_args_i
     //And direct query
     if(begin < end) {
       pqxx::work txn(conn, "query fuzzy hashes");
-      std::vector<unsigned int> sids(std::distance(begin, end));
+      Fuzzy_Interface::SID_List_Type sids(std::distance(begin, end));
       std::transform(begin, end, sids.begin(), [](const char *arg) { return boost::lexical_cast<unsigned int>(arg); });
       fuzzy_interface->find_similarities(txn, sids, args);
     }

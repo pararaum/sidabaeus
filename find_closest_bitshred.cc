@@ -18,18 +18,53 @@
 
 typedef std::vector<std::pair<unsigned int, double> > DistancesVector;
 
+unsigned bit_count(uint8_t x) {
+  struct {
+    unsigned operator()(uint8_t nibble) const {
+      switch(nibble) {
+      case 0:
+	return 0;
+      case 1:
+      case 2:
+      case 4:
+      case 8:
+	return 1;
+      case 3:
+      case 5:
+      case 6:
+      case 9:
+      case 10:
+      case 12:
+	return 2;
+      case 7:
+      case 11:
+      case 13:
+      case 14:
+	return 3;
+      case 15:
+	return 4;
+      default:
+	throw std::logic_error("nibble");
+      }
+    }
+  } locf;
+  return locf(x & 0xF) + locf(x >> 4);
+}
+
 DistancesVector calc_distances(pqxx::work &txn, unsigned int fstsid, unsigned int m, unsigned int n, const std::string &hashname, bool verbose) {
   std::ostringstream query;
   pqxx::result result;
   std::vector<std::pair<unsigned int, double> > distances;
+  static auto plus_bitcount = [](unsigned s, uint8_t x) { return s + bit_count(x);};
 
-  query << "SELECT bfst.sid, bsnd.sid, bfst.bitshred&bsnd.bitshred, bfst.bitshred|bsnd.bitshred FROM bitshred bfst, bitshred bsnd WHERE"
+  query << "SELECT bfst.sid, bsnd.sid, bfst.bitshred, bsnd.bitshred FROM bitshred bfst, bitshred bsnd WHERE"
 	<< " (bfst.m, bfst.n, bfst.hash) = (bsnd.m, bsnd.n, bsnd.hash) AND bfst.sid != bsnd.sid"
 	<< " AND bfst.sid = " << fstsid
 	<< " AND bfst.m = " << m
 	<< " AND bfst.n = " << n
 	<< " AND bfst.hash = " << txn.quote(hashname)
 	<< ';';
+  //std::cout << query.str() << std::endl;
   /*
    * Warning! This query
    * 
@@ -46,10 +81,15 @@ DistancesVector calc_distances(pqxx::work &txn, unsigned int fstsid, unsigned in
       unsigned int fstsid = row[0].as<unsigned int>();
 #endif
       unsigned int sndsid = row[1].as<unsigned int>();
-      std::string setdifference(row[2].c_str());
-      std::string setunion(row[3].c_str());
-      double diff_count = static_cast<double>(std::count(setdifference.begin(), setdifference.end(), '1'));
-      double unio_count = static_cast<double>(std::count(setunion.begin(), setunion.end(), '1'));
+      pqxx::binarystring fst(row[2]);
+      pqxx::binarystring snd(row[3]);      
+      // std::vector<uint8_t> setdifference(fst.size());
+      // std::vector<uint8_t> setunion(fst.size());
+      if(fst.size() != snd.size()) throw std::runtime_error("fst.size() != snd.size");
+      double diff_count = std::inner_product(fst.begin(), fst.end(), snd.begin(), 0U, plus_bitcount, std::bit_and<uint8_t>());
+      double unio_count = std::inner_product(fst.begin(), fst.end(), snd.begin(), 0U, plus_bitcount, std::bit_or<uint8_t>());
+      // double diff_count = static_cast<double>(std::count(setdifference.begin(), setdifference.end(), '1'));
+      // double unio_count = static_cast<double>(std::count(setunion.begin(), setunion.end(), '1'));
       assert(fstsid != sndsid);
       assert(diff_count <= unio_count);
       //Jaccard distance

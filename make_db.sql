@@ -49,10 +49,12 @@ CREATE INDEX songs_released_tgrmidx ON songs USING GIST (released gist_trgm_ops)
 -- J. Jang, D. Brumley, S. Venkataraman, "BitShred: Fast, Scalable Malware Triage", 2010.
 -- Y. Li, et al., "Experimental Study of Fuzzy Hashing in Malware Clustering Analysis", 2015(?).
 -- Calculate n-grams, hash them and set the corresponding bit in a bitmap of length m bits.
-CREATE TABLE IF NOT EXISTS bitshred8192 (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, n INTEGER NOT NULL, hash TEXT NOT NULL, bitshred BIT(8192) NOT NULL, PRIMARY KEY (sid,n,hash), CHECK (n > 0));
+-- CREATE TABLE IF NOT EXISTS bitshred8192 (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, n INTEGER NOT NULL, hash TEXT NOT NULL, bitshred BIT(8192) NOT NULL, PRIMARY KEY (sid,n,hash), CHECK (n > 0));
 
 -- The size of the bitshred can also be varied, therefore we use BIT VARYING to store m bits.
-CREATE TABLE IF NOT EXISTS bitshred (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, m integer NOT NULL, n INTEGER NOT NULL, hash TEXT NOT NULL, bitshred BIT VARYING NOT NULL, PRIMARY KEY (sid,m,n,hash), CHECK (n > 0 AND length(bitshred) = m));
+-- CREATE TABLE IF NOT EXISTS bitshred (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, m integer NOT NULL, n INTEGER NOT NULL, hash TEXT NOT NULL, bitshred BIT VARYING NOT NULL, PRIMARY KEY (sid,m,n,hash), CHECK (n > 0 AND length(bitshred) = m));
+-- Bit varying is *slow*, at least a factor of four.
+CREATE TABLE IF NOT EXISTS bitshred (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, m integer NOT NULL, n INTEGER NOT NULL, hash TEXT NOT NULL, bitshred bytea NOT NULL, PRIMARY KEY (sid,m,n,hash), CHECK (n > 0 AND length(bitshred)*8 >= m));
 
 
 -- Table for the TLSH fuzzy-hash

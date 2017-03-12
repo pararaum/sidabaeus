@@ -18,7 +18,7 @@ calculate_bitshred.cmdline.h: calculate_bitshred.ggo
 
 calculate_bitshred.cmdline.o: calculate_bitshred.cmdline.c calculate_bitshred.ggo
 
-calculate_bitshred: calculate_bitshred.cmdline.h calculate_bitshred.cmdline.o calculate_bitshred.o
+calculate_bitshred: calculate_bitshred.cmdline.h calculate_bitshred.cmdline.o calculate_bitshred.o hash.o
 	$(CXX) -g -o $@ $+ $(LIBS)
 
 calculate_fuzzy_hash.cmdline.h: calculate_fuzzy_hash.ggo

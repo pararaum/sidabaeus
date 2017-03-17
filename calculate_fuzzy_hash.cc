@@ -16,6 +16,9 @@
 #include "calculate_fuzzy_hash.cmdline.h"
 
 #define RESULT_STRIDE 23
+#ifndef MIN_DATA_LENGTH
+#define MIN_DATA_LENGTH 256
+#endif
 
 class Fuzzy_Interface {
 protected:

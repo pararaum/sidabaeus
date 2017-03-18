@@ -55,7 +55,7 @@ CREATE INDEX songs_released_tgrmidx ON songs USING GIST (released gist_trgm_ops)
 -- CREATE TABLE IF NOT EXISTS bitshred (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, m integer NOT NULL, n INTEGER NOT NULL, hash TEXT NOT NULL, bitshred BIT VARYING NOT NULL, PRIMARY KEY (sid,m,n,hash), CHECK (n > 0 AND length(bitshred) = m));
 -- Bit varying is *slow*, at least a factor of four.
 CREATE TABLE IF NOT EXISTS bitshred (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, m integer NOT NULL, n INTEGER NOT NULL, hash TEXT NOT NULL, bitshred bytea NOT NULL, PRIMARY KEY (sid,m,n,hash), CHECK (n > 0 AND length(bitshred)*8 >= m));
-
+CREATE INDEX bitshred_idx ON bitshred (m,n,hash);
 
 -- Table for the TLSH fuzzy-hash
 CREATE TABLE IF NOT EXISTS fuzzy_tlsh (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, hash bytea NOT NULL, PRIMARY KEY (sid));

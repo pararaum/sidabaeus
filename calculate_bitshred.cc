@@ -14,10 +14,23 @@
 #include "bitshred.hh"
 #include "hash.hh"
 
+#define CALC_STRIDE 419
+
 typedef std::map<unsigned long, pqxx::binarystring> Sid2Data;
 
-
-Sid2Data get_sids_without(pqxx::connection &conn, unsigned int m, unsigned int n, const std::string &hash) {
+/*! \brief Get sids without calculated bitshreds
+ *
+ * This function gets all (up to maxs) SIDs with date which do not
+ * have any bitshred with the correct parameters attaced.
+ *
+ * \param conn postgresql connection
+ * \param maxs maximum sids (0 = unlimited)
+ * \param m bitshred size in bits
+ * \param n n-gram selection
+ * \param hash hash name
+ * \return Map with sid to binary data mappings
+ */
+Sid2Data get_sids_without(pqxx::connection &conn, unsigned int maxs, unsigned int m, unsigned int n, const std::string &hash) {
   Sid2Data sids;
   pqxx::work txn(conn, "get sids");
   std::ostringstream query;
@@ -28,6 +41,9 @@ Sid2Data get_sids_without(pqxx::connection &conn, unsigned int m, unsigned int n
 	<< " AND n = " << txn.quote(n)
 	<< " AND hash = " << txn.quote(hash)
 	<< ") AND data NOTNULL";
+  if(maxs > 0) {
+    query << " LIMIT " << maxs;
+  }
   //std::cout << query.str() << std::endl;
   pqxx::result result(txn.exec(query.str()));
   for(auto row : result) {
@@ -92,24 +108,38 @@ unsigned store_bitshred(pqxx::connection &conn, unsigned long sid, unsigned int 
   return bits;
 }
 
-int run(pqxx::connection &conn, const gengetopt_args_info &args) {
-  std::map<std::string, std::function<uint32_t(const uint8_t *, size_t)> > hash_functions {
+unsigned long calculate_all_bitshreds(pqxx::connection &conn, unsigned int m, unsigned int n, const std::string &hash) {
+  unsigned long sids_got;
+  unsigned long total = 0;
+  static std::map<std::string, std::function<uint32_t(const uint8_t *, size_t)> > hash_functions {
     { "jenkins", &jenkins_one_at_a_time_hash },
     { "djb2", &djb2_hash },
     { "djb2xor", &djb2xor_hash },
     { "sbox", &sbox_hash}
   };
-  try {
-    auto hash_function = hash_functions.at(args.hash_arg);
-    auto siddata(get_sids_without(conn, args.size_arg, args.ngram_arg, args.hash_arg));
-    std::cout << "SIDs loaded:" << siddata.size() << std::endl;
+  auto hash_function = hash_functions.at(hash);
+  do {
+    auto siddata(get_sids_without(conn, CALC_STRIDE, m, n, hash));
+    sids_got = siddata.size();
+    //std::cout << sids_got << std::endl;
+    total += sids_got;
     for(auto const &i : siddata) {
       std::cout << boost::format("$%04X ") % i.first;
-      BitshredType bitshred(calculate_bitshred(i.second, args.size_arg, args.ngram_arg, hash_function));
-      unsigned int bits = store_bitshred(conn, i.first, args.size_arg, args.ngram_arg, args.hash_arg, bitshred);
+      BitshredType bitshred(calculate_bitshred(i.second, m, n, hash_function));
+      unsigned int bits = store_bitshred(conn, i.first, m, n, hash, bitshred);
       std::cout << boost::format("size=$%04x bits=$%04x %13.6e") % i.second.size() % bits % (static_cast<double>(bits) / bitshred.size());
       std::cout << std::endl;
     }
+  } while(sids_got > 0);
+  return total;
+}
+
+
+int run(pqxx::connection &conn, const gengetopt_args_info &args) {
+  unsigned long total;
+  try {
+    total = calculate_all_bitshreds(conn, args.size_arg, args.ngram_arg, args.hash_arg);
+    std::cout << "SIDs calculated: " << total << std::endl;
   }
   catch(const std::exception &excp) {
     std::cerr << "Exception: " << excp.what() << std::endl;

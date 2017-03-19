@@ -60,7 +60,8 @@ BitshredType calculate_bitshred(const pqxx::binarystring &data, unsigned int m, 
   pqxx::binarystring::const_iterator dbegin(data.begin());
   pqxx::binarystring::const_iterator dend(data.end());
 
-  if(std::distance(dbegin, dend) < n) throw std::invalid_argument("not enough bytes for bitshred");
+  assert(std::distance(dbegin, dend) >= 0);
+  if(static_cast<size_t>(std::distance(dbegin, dend)) < n) throw std::invalid_argument("not enough bytes for bitshred");
   for(auto ptr = dbegin; ptr < dend - n; ++ptr) {
     uint32_t hash = hashfun(&ptr[0], n);
     bitshred[hash % m] = 1;

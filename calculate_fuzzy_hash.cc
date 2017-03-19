@@ -129,6 +129,7 @@ protected:
        << ':'
        << result[0]["hash"].as<std::string>();
     hash = hs.str();
+    assert(hash.size() <= FUZZY_MAX_RESULT);
     return hash;
   }
 

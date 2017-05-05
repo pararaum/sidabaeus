@@ -14,7 +14,7 @@
 #include "bitshred.hh"
 #include "hash.hh"
 
-#define CALC_STRIDE 419
+#define CALC_STRIDE 839
 
 typedef std::map<unsigned long, pqxx::binarystring> Sid2Data;
 
@@ -75,9 +75,8 @@ std::ostream &operator<<(std::ostream &out, const BitshredType &bitshred) {
   return out;
 }
 
-unsigned store_bitshred(pqxx::connection &conn, unsigned long sid, unsigned int m, unsigned int n, const std::string &hashname, const BitshredType &bitshred) {
+unsigned store_bitshred(pqxx::work &txn, unsigned long sid, unsigned int m, unsigned int n, const std::string &hashname, const BitshredType &bitshred) {
   unsigned int bits = 0;
-  pqxx::work txn(conn, "store bitshred");
   std::ostringstream query;
   std::ostringstream shred;
   std::string binstr;
@@ -103,14 +102,13 @@ unsigned store_bitshred(pqxx::connection &conn, unsigned long sid, unsigned int 
 	<< "decode(" << txn.quote(binstr) << ", 'hex') );";
   //std::cout << query.str() << std::endl;
   txn.exec(query.str());
-  txn.commit();
-  //bits = bitshred.count();
   bits = std::count(bitshred.begin(), bitshred.end(), 1);
   return bits;
 }
 
 unsigned long calculate_all_bitshreds(pqxx::connection &conn, unsigned int m, unsigned int n, const std::string &hash) {
   unsigned long sids_got;
+  unsigned int bits;
   unsigned long total = 0;
   static std::map<std::string, std::function<uint32_t(const uint8_t *, size_t)> > hash_functions {
     { "jenkins", &jenkins_one_at_a_time_hash },
@@ -119,18 +117,21 @@ unsigned long calculate_all_bitshreds(pqxx::connection &conn, unsigned int m, un
     { "sbox", &sbox_hash}
   };
   auto hash_function = hash_functions.at(hash);
+
   do {
     auto siddata(get_sids_without(conn, CALC_STRIDE, m, n, hash));
+    pqxx::work txn(conn, "store bitshred");
     sids_got = siddata.size();
     //std::cout << sids_got << std::endl;
     total += sids_got;
     for(auto const &i : siddata) {
       std::cout << boost::format("$%04X ") % i.first;
       BitshredType bitshred(calculate_bitshred(i.second, m, n, hash_function));
-      unsigned int bits = store_bitshred(conn, i.first, m, n, hash, bitshred);
+      bits = store_bitshred(txn, i.first, m, n, hash, bitshred);
       std::cout << boost::format("size=$%04x bits=$%04x %13.6e") % i.second.size() % bits % (static_cast<double>(bits) / bitshred.size());
       std::cout << std::endl;
     }
+    txn.commit();
   } while(sids_got > 0);
   return total;
 }

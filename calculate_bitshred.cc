@@ -116,6 +116,21 @@ unsigned long calculate_all_bitshreds(pqxx::connection &conn, unsigned int m, un
     { "djb2xor", &djb2xor_hash },
     { "sbox", &sbox_hash}
   };
+
+  if(hash_functions.find(hash) == hash_functions.end()) {
+    //Count not find the selected hash.
+    bool first = true;
+    std::ostringstream error;
+    for(auto &i : hash_functions) {
+      if(first) {
+	error << "unknown hash, valid are: " << i.first;
+	first = false;
+      } else {
+	error << ", " << i.first;
+      }
+    }
+    throw std::runtime_error(error.str());
+  }
   auto hash_function = hash_functions.at(hash);
 
   do {

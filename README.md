@@ -15,6 +15,7 @@ Links:
 Installation
 ============
 
-sudo apt-get install libboost-dev libpqxx-dev gengetopt
-
+```
+sudo apt-get install libboost-dev libpqxx-dev gengetopt libtlsh-dev python-psycopg2
+```
 

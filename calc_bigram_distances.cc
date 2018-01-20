@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <numeric>
 #include <iostream>
 #include <boost/format.hpp>
 #include <pqxx/pqxx>

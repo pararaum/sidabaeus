@@ -5,6 +5,7 @@
 #include <set>
 #include <vector>
 #include <sstream>
+#include <numeric>
 #include <cstdlib>
 #include <cmath>
 #include <cstdio>

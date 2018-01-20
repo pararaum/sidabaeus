@@ -28,14 +28,11 @@ Therefore we will abandon the storage of all bigram and will have to calculate t
 
 """
 
-DBNAME = "chip"
-PSIDFORMAT = ">LHHHHHHHL32s32s32sH"
-
-import os
-import sys
-import struct
-import psycopg2
 import argparse
+import psycopg2
+import sidformat
+
+DBNAME = "chip"
 
 def calc_bigram_counts(content):
     """
@@ -65,12 +62,13 @@ def insert_file(crsr, fname, store):
     """
     with file(fname) as inpf:
         content = inpf.read()
-        data = struct.unpack_from(PSIDFORMAT, content)
-        if data[0] not in (0x50534944, 0x52534944):
-            raise RuntimeError("Wrong magic $%08X for '%s'" % (data[0], fname))
-        name = data[9].strip('\0').decode("iso-8859-15")
-        author = data[10].strip('\0').decode("iso-8859-15")
-        released = data[11].strip('\0').decode("iso-8859-15")
+        try:
+            data = sidformat.Psid(content)
+        except RuntimeError, excp:
+            raise RuntimeError("%s for '%s'" % (str(excp), fname))
+        name = data.name
+        author = data.author
+        released = data.released
         #print data, name, author, released
         if store:
             crsr.execute("INSERT INTO files (filename, data) VALUES(%s, %s) RETURNING sid;", (fname, psycopg2.Binary(content)))
@@ -96,7 +94,7 @@ def cli():
     parser.add_argument("--dbpass", help="database password")
     parser.add_argument("--commit", help="Intermediately commit into database", default=False, type=bool)
     parser.add_argument("--ignore", help="Ignore errors on insert", default=False, type=bool)
-    parser.add_argument("--store", help="Store file in database", default=False, type=bool)    
+    parser.add_argument("--store", help="Store file in database", default=False, type=bool)
     parser.add_argument("files", nargs='+')
     return parser.parse_args()
 
@@ -117,18 +115,18 @@ def main(cliargs):
     conn = psycopg2.connect(constr)
     crsr = conn.cursor()
     for num, fname in enumerate(fnames):
-       print("Processing %60s ($%04x/$%04x)" % (fname, num, len(fnames) - 1))
-       try:
-           insert_file(crsr, fname, cliargs.store)
-           if cliargs.commit:
-               conn.commit()
-       except Exception, excp:
-           print "Exception:", excp
-           if not cliargs.ignore:
-               raise
-           else:
-               conn.rollback()
-               crsr = conn.cursor()
+        print("Processing %60s ($%04x/$%04x)" % (fname, num, len(fnames) - 1))
+        try:
+            insert_file(crsr, fname, cliargs.store)
+            if cliargs.commit:
+                conn.commit()
+        except Exception, excp:
+            print "Exception:", excp
+            if not cliargs.ignore:
+                raise
+            else:
+                conn.rollback()
+                crsr = conn.cursor()
     print "Done!"
     conn.commit()
 

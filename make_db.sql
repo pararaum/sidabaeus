@@ -1,6 +1,7 @@
 -- This is a song database for SIDs...
 
-CREATE EXTENSION pg_trgm;
+-- -This extension has to created by the superuser.
+-- CREATE EXTENSION pg_trgm;
 
 -- For each song we store an id, the songname, the author, when it was
 -- released, and the filename we got the data from. Alternatively we
@@ -20,7 +21,7 @@ CREATE EXTENSION pg_trgm;
 -- This is the files tables. It contains the sid (storage id) and the
 -- file name.
 CREATE TABLE IF NOT EXISTS files (sid SERIAL PRIMARY KEY, filename TEXT NOT NULL UNIQUE, data bytea);
-CREATE INDEX files_length_data ON files (length(data));
+CREATE INDEX IF NOT EXISTS files_length_data ON files (length(data));
 
 -- This table contains the counts for all bigrams found in the
 -- file. Only a single unique tuple of the storage id, first byte,
@@ -36,12 +37,12 @@ CREATE TABLE IF NOT EXISTS bigram2d_histo (sid INTEGER NOT NULL UNIQUE REFERENCE
 
 CREATE TABLE IF NOT EXISTS songs (sid INTEGER NOT NULL UNIQUE REFERENCES files ON DELETE CASCADE, name TEXT NOT NULL, author TEXT NOT NULL, released TEXT NOT NULL);
 -- IF NOT EXISTS in Postgresql >= 9.5
-CREATE INDEX songs_name_idx ON songs (LOWER(name));
-CREATE INDEX songs_author_idx ON songs (LOWER(author));
-CREATE INDEX songs_released_idx ON songs (LOWER(released));
-CREATE INDEX songs_name_tgrmidx ON songs USING GIST (name gist_trgm_ops);
-CREATE INDEX songs_author_tgrmidx ON songs USING GIST (author gist_trgm_ops);
-CREATE INDEX songs_released_tgrmidx ON songs USING GIST (released gist_trgm_ops);
+CREATE INDEX IF NOT EXISTS songs_name_idx ON songs (LOWER(name));
+CREATE INDEX IF NOT EXISTS songs_author_idx ON songs (LOWER(author));
+CREATE INDEX IF NOT EXISTS songs_released_idx ON songs (LOWER(released));
+CREATE INDEX IF NOT EXISTS songs_name_tgrmidx ON songs USING GIST (name gist_trgm_ops);
+CREATE INDEX IF NOT EXISTS songs_author_tgrmidx ON songs USING GIST (author gist_trgm_ops);
+CREATE INDEX IF NOT EXISTS songs_released_tgrmidx ON songs USING GIST (released gist_trgm_ops);
 
 
 -- Bitshred as feature storage
@@ -55,7 +56,7 @@ CREATE INDEX songs_released_tgrmidx ON songs USING GIST (released gist_trgm_ops)
 -- CREATE TABLE IF NOT EXISTS bitshred (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, m integer NOT NULL, n INTEGER NOT NULL, hash TEXT NOT NULL, bitshred BIT VARYING NOT NULL, PRIMARY KEY (sid,m,n,hash), CHECK (n > 0 AND length(bitshred) = m));
 -- Bit varying is *slow*, at least a factor of four.
 CREATE TABLE IF NOT EXISTS bitshred (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, m integer NOT NULL, n INTEGER NOT NULL, hash TEXT NOT NULL, bitshred bytea NOT NULL, PRIMARY KEY (sid,m,n,hash), CHECK (n > 0 AND length(bitshred)*8 >= m));
-CREATE INDEX bitshred_idx ON bitshred (m,n,hash);
+CREATE INDEX IF NOT EXISTS bitshred_idx ON bitshred (m,n,hash);
 
 -- Table for the TLSH fuzzy-hash
 CREATE TABLE IF NOT EXISTS fuzzy_tlsh (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, hash bytea NOT NULL, PRIMARY KEY (sid));
@@ -63,8 +64,8 @@ CREATE TABLE IF NOT EXISTS fuzzy_tlsh (sid INTEGER NOT NULL REFERENCES files ON 
 
 -- Table for ssdeep fuzzy-hash
 CREATE TABLE IF NOT EXISTS fuzzy_ssdeep (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, blocksize INTEGER NOT NULL, hash TEXT NOT NULL, CHECK(blocksize > 0), PRIMARY KEY (sid));
-CREATE index fuzzy_ssdeep_blocksize ON fuzzy_ssdeep (blocksize);
-CREATE index fuzzy_ssdeep_hash ON fuzzy_ssdeep (hash);
+CREATE IF NOT EXISTS index fuzzy_ssdeep_blocksize ON fuzzy_ssdeep (blocksize);
+CREATE IF NOT EXISTS index fuzzy_ssdeep_hash ON fuzzy_ssdeep (hash);
 
 
 -- Very slow?
@@ -98,3 +99,4 @@ BEGIN
     RETURN c;
 END;
 $$ LANGUAGE plpgsql;
+

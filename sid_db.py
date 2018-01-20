@@ -32,8 +32,6 @@ import argparse
 import psycopg2
 import sidformat
 
-DBNAME = "chip"
-
 def calc_bigram_counts(content):
     """
     Calculate bigram counts
@@ -88,13 +86,13 @@ def cli():
     @returns: ArgumentParser
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dbname", help="database name", default=DBNAME)
+    parser.add_argument("--dbname", help="database name")
     parser.add_argument("--dbhost", help="database host")
     parser.add_argument("--dbuser", help="database user")
     parser.add_argument("--dbpass", help="database password")
     parser.add_argument("--commit", help="Intermediately commit into database", default=False, type=bool)
     parser.add_argument("--ignore", help="Ignore errors on insert", default=False, type=bool)
-    parser.add_argument("--store", help="Store file in database", default=False, type=bool)
+    parser.add_argument("--store", help="Store file in database", default=True, type=bool)
     parser.add_argument("files", nargs='+')
     return parser.parse_args()
 
@@ -105,7 +103,9 @@ def main(cliargs):
     @param cliargs: command line arguments
     """
     fnames = cliargs.files
-    constr = "dbname=%s" % cliargs.dbname
+    constr = ""
+    if cliargs.dbname is not None:
+        constr += "dbname=%s" % cliargs.dbname
     if cliargs.dbuser is not None:
         constr += " user=%s" % cliargs.dbuser
     if cliargs.dbhost is not None:

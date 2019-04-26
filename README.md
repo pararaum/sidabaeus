@@ -25,6 +25,7 @@ Create a database user <user> and a database (example siddb):
 
 ```
 createuser <user>
+echo "CREATE EXTENSION pg_trgm;" | sudo -u postgres psql
 createdb -O <user> siddb
 psql siddb < make_db.sql
 ```

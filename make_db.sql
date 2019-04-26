@@ -64,8 +64,8 @@ CREATE TABLE IF NOT EXISTS fuzzy_tlsh (sid INTEGER NOT NULL REFERENCES files ON 
 
 -- Table for ssdeep fuzzy-hash
 CREATE TABLE IF NOT EXISTS fuzzy_ssdeep (sid INTEGER NOT NULL REFERENCES files ON DELETE CASCADE, blocksize INTEGER NOT NULL, hash TEXT NOT NULL, CHECK(blocksize > 0), PRIMARY KEY (sid));
-CREATE IF NOT EXISTS index fuzzy_ssdeep_blocksize ON fuzzy_ssdeep (blocksize);
-CREATE IF NOT EXISTS index fuzzy_ssdeep_hash ON fuzzy_ssdeep (hash);
+CREATE INDEX IF NOT EXISTS fuzzy_ssdeep_blocksize ON fuzzy_ssdeep (blocksize);
+CREATE INDEX IF NOT EXISTS fuzzy_ssdeep_hash ON fuzzy_ssdeep (hash);
 
 
 -- Very slow?
